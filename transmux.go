@@ -153,7 +153,7 @@ func (s *Stream) Close() error {
 	buf := make([]byte, 5)
 	buf[0] = 'd'
 	binary.LittleEndian.PutUint32(buf[1:], s.id)
-	return s.t.writeLocked(buf)
+	return s.t.write(buf)
 }
 
 func (s *Stream) Write(p []byte) (n int, retErr error) {
