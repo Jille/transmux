@@ -10,6 +10,8 @@ import (
 	"math/rand"
 	"runtime"
 	"sync"
+
+	"github.com/Jille/dfr"
 )
 
 type Role int
@@ -151,37 +153,39 @@ func (s *Stream) Close() error {
 	return s.t.writeLocked(buf)
 }
 
-func (s *Stream) Write(p []byte) (int, error) {
+func (s *Stream) Write(p []byte) (n int, retErr error) {
+	d := dfr.D{}
+	defer d.Run(&retErr)
 	buf := make([]byte, 7)
 	buf[0] = 'd'
 	binary.LittleEndian.PutUint32(buf[1:], s.id)
-	n := 0
+	n = 0
 	for len(p) > 0 {
 		s.t.mtx.Lock()
+		unlock := d.Add(s.t.mtx.Unlock)
 		if s.t.err != nil {
 			return n, s.t.err
 		}
 		if s.closed {
 			return n, io.EOF
 		}
-		s.t.mtx.Unlock()
+		unlock(true)
 		l := s.t.maxChunkSize
 		if len(p) < l {
 			l = len(p)
 		}
 		binary.LittleEndian.PutUint16(buf[5:], uint16(l))
 		s.t.writeMtx.Lock()
+		unlock = d.Add(s.t.writeMtx.Unlock)
 		err := s.t.writeLocked(buf)
 		if err != nil {
-			s.t.writeMtx.Unlock()
 			return n, err
 		}
 		err = s.t.writeLocked(p[:l])
 		if err != nil {
-			s.t.writeMtx.Unlock()
 			return n, err
 		}
-		s.t.writeMtx.Unlock()
+		unlock(true)
 		p = p[l:]
 		n += l
 		// Allow other threads to interleave their data.
