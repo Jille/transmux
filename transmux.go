@@ -137,7 +137,10 @@ func (t *Transport) writeLocked(p []byte) error {
 }
 
 func (s *Stream) Close() error {
+	d := dfr.D{}
+	defer d.Run(nil)
 	s.t.mtx.Lock()
+	unlock := d.Add(s.t.mtx.Unlock)
 	if s.t.err != nil {
 		return s.t.err
 	}
@@ -145,7 +148,7 @@ func (s *Stream) Close() error {
 		return nil
 	}
 	s.closed = true
-	s.t.mtx.Unlock()
+	unlock(true)
 
 	buf := make([]byte, 5)
 	buf[0] = 'd'
