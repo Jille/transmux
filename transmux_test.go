@@ -1,20 +1,20 @@
 package transmux
 
 import (
-	"testing"
-	"runtime"
-	"io"
 	"fmt"
+	"io"
+	"runtime"
 	"sync"
+	"testing"
 )
 
 type pipehalf struct {
-	other *pipehalf
-	inqueue chan []byte
+	other     *pipehalf
+	inqueue   chan []byte
 	leftovers []byte
-	mtx sync.Mutex
-	rmtx sync.Mutex
-	closed bool
+	mtx       sync.Mutex
+	rmtx      sync.Mutex
+	closed    bool
 }
 
 func (h *pipehalf) Read(p []byte) (n int, retErr error) {
@@ -34,7 +34,7 @@ func (h *pipehalf) Read(p []byte) (n int, retErr error) {
 		h.leftovers = h.leftovers[n:]
 		return n, nil
 	}
-	d := <- h.inqueue
+	d := <-h.inqueue
 	n = copy(p, d)
 	if len(d) > n {
 		h.leftovers = d[n:]
@@ -107,51 +107,55 @@ func TestPipe(t *testing.T) {
 func TestStreams(t *testing.T) {
 	errch := make(chan error)
 	r, w := pipe()
-	go func() { errch <- func() error {
-		var lastRChannel *Stream
-		rt, err := WrapTransport(r, Unknown, func(s *Stream) {
-			lastRChannel = s
-		})
-		if err != nil {
-			return fmt.Errorf("WrapTransport(r): %v", err)
-		}
-		rc1, err := rt.NewStream()
-		if err != nil {
-			return fmt.Errorf("rt.NewStream(): %v", err)
-		}
-		for lastRChannel == nil {
-			runtime.Gosched()
-		}
-		buf := make([]byte, 2)
-		n, err := rc1.Read(buf)
-		if n != 1 || err != nil {
-			return fmt.Errorf("rc1.Read(): %d, %v; want: 2, nil", n, err)
-		}
-		n, err = lastRChannel.Read(buf)
-		if n != 1 || err != nil {
-			return fmt.Errorf("rc1.Read(): %d, %v; want: 2, nil", n, err)
-		}
-		return nil
-	}() }()
-	go func() { errch <- func() error {
-		var lastWChannel *Stream
-		wt, err := WrapTransport(w, Unknown, func(s *Stream) {
-			lastWChannel = s
-		})
-		if err != nil {
-			return fmt.Errorf("WrapTransport(w): %v", err)
-		}
-		wc1, err := wt.NewStream()
-		if err != nil {
-			return fmt.Errorf("wt.NewStream(): %v", err)
-		}
-		wc1.Write([]byte{'X'})
-		for lastWChannel == nil {
-			runtime.Gosched()
-		}
-		lastWChannel.Write([]byte{'Q'})
-		return nil
-	}() }()
+	go func() {
+		errch <- func() error {
+			var lastRChannel *Stream
+			rt, err := WrapTransport(r, Unknown, func(s *Stream) {
+				lastRChannel = s
+			})
+			if err != nil {
+				return fmt.Errorf("WrapTransport(r): %v", err)
+			}
+			rc1, err := rt.NewStream()
+			if err != nil {
+				return fmt.Errorf("rt.NewStream(): %v", err)
+			}
+			for lastRChannel == nil {
+				runtime.Gosched()
+			}
+			buf := make([]byte, 2)
+			n, err := rc1.Read(buf)
+			if n != 1 || err != nil {
+				return fmt.Errorf("rc1.Read(): %d, %v; want: 2, nil", n, err)
+			}
+			n, err = lastRChannel.Read(buf)
+			if n != 1 || err != nil {
+				return fmt.Errorf("rc1.Read(): %d, %v; want: 2, nil", n, err)
+			}
+			return nil
+		}()
+	}()
+	go func() {
+		errch <- func() error {
+			var lastWChannel *Stream
+			wt, err := WrapTransport(w, Unknown, func(s *Stream) {
+				lastWChannel = s
+			})
+			if err != nil {
+				return fmt.Errorf("WrapTransport(w): %v", err)
+			}
+			wc1, err := wt.NewStream()
+			if err != nil {
+				return fmt.Errorf("wt.NewStream(): %v", err)
+			}
+			wc1.Write([]byte{'X'})
+			for lastWChannel == nil {
+				runtime.Gosched()
+			}
+			lastWChannel.Write([]byte{'Q'})
+			return nil
+		}()
+	}()
 	err := <-errch
 	if err != nil {
 		t.Fatal(err)
